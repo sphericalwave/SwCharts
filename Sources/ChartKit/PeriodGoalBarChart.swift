@@ -224,12 +224,12 @@ public struct PeriodGoalBarChart: View {
                     yStart: .value("Floor", domain.lowerBound),
                     yEnd: .value("Value", goal)
                 )
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.primary)
                     .goalGlow(intensity: glow)
                     .annotation(position: .top) {
                         Text("\(goal, specifier: valueSpecifier)")
                             .font(.caption2)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                     }
             }
         }
@@ -268,7 +268,7 @@ private extension ChartContent {
         let radius = 2.0 + (4.0 * clamped)
         return self
             .opacity(opacity)
-            .shadow(color: Color.white.opacity(shadowOpacity), radius: radius)
+            .shadow(color: Color.primary.opacity(shadowOpacity), radius: radius)
     }
 }
 
