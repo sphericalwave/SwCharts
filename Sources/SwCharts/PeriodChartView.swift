@@ -14,6 +14,9 @@ import Charts
 /// - the current, unfinished week or month faded and labelled "so far";
 /// - drag-to-read: slide a finger across the chart and the header shows the
 ///   bucket under it. The selection stays after the finger lifts;
+/// - optionally a `bucketDetail` line naming what a bucket's value came
+///   from (the lift behind a weekly max), in the header and on the selected
+///   point;
 /// - optionally a `PeriodGoal`: a dashed goal line across each bucket (scaled
 ///   per period for `.sum` metrics) and each bar/point tinted hit or miss.
 ///
@@ -44,6 +47,7 @@ public struct PeriodChartView: View {
     private let hitColor: Color
     private let missColor: Color
     private let height: CGFloat
+    private let bucketDetail: ((PeriodBucket) -> String?)?
 
     @State private var selectedDate: Date?
 
@@ -61,6 +65,7 @@ public struct PeriodChartView: View {
         hitColor: Color = .green,
         missColor: Color = .orange,
         height: CGFloat = 160,
+        bucketDetail: ((PeriodBucket) -> String?)? = nil,
         bucketer: PeriodBucketer = PeriodBucketer(),
         now: Date = .now
     ) {
@@ -80,6 +85,7 @@ public struct PeriodChartView: View {
         self.hitColor = hitColor
         self.missColor = missColor
         self.height = height
+        self.bucketDetail = bucketDetail
     }
 
     private var selectedBucket: PeriodBucket? {
@@ -131,9 +137,12 @@ public struct PeriodChartView: View {
                     Text(valueLabel(value))
                         .font(.title3.monospacedDigit().bold())
                     HStack(spacing: 4) {
-                        Text(caption(for: shown))
+                        Text([bucketDetail?(shown), caption(for: shown)]
+                                .compactMap { $0 }.joined(separator: " · "))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                         if selectedBucket == nil, let change = summary.percentChange {
                             changeLabel(change)
                         }
@@ -318,8 +327,17 @@ public struct PeriodChartView: View {
     @ViewBuilder
     private func annotation(for bucket: PeriodBucket, isSelected: Bool) -> some View {
         if isSelected, let value = bucket.value {
-            Text(valueLabel(value))
-                .font(.caption2.monospacedDigit().bold())
+            VStack(spacing: 0) {
+                Text(valueLabel(value))
+                    .font(.caption2.monospacedDigit().bold())
+                if let detail = bucketDetail?(bucket) {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 140)
+                }
+            }
         } else if bucket.isPartial {
             Text("so far")
                 .font(.caption2)
