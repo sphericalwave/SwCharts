@@ -24,6 +24,11 @@ import Charts
 /// pass one when that default blends into the line (e.g. `.primary` for
 /// white-on-dark dots).
 ///
+/// Pass `current` to mark one point — say, the entry being edited — where it
+/// lands against the history: it joins the line and gets a larger marker.
+/// `projection` draws a dashed what-if continuation from there (or from the
+/// last point), outside the rising/falling coloring.
+///
 /// Renders plain content — wrap it in your own `Section` or card.
 public struct SlopeColoredLineChart: View {
 
@@ -35,6 +40,9 @@ public struct SlopeColoredLineChart: View {
     private let showsPoints: Bool
     private let pointColor: Color?
     private let height: CGFloat
+    private let current: ChartPoint?
+    private let currentColor: Color
+    private let projection: [ChartPoint]
 
     public init(
         points: [ChartPoint],
@@ -44,7 +52,10 @@ public struct SlopeColoredLineChart: View {
         fallingColor: Color = .red,
         showsPoints: Bool = true,
         pointColor: Color? = nil,
-        height: CGFloat = 140
+        height: CGFloat = 140,
+        current: ChartPoint? = nil,
+        currentColor: Color = .accentColor,
+        projection: [ChartPoint] = []
     ) {
         self.points = points
         self.yDomain = yDomain
@@ -54,6 +65,21 @@ public struct SlopeColoredLineChart: View {
         self.showsPoints = showsPoints
         self.pointColor = pointColor
         self.height = height
+        self.current = current
+        self.currentColor = currentColor
+        self.projection = projection
+    }
+
+    /// The solid line: the history, then `current` when there is one.
+    static func linePoints(_ points: [ChartPoint], current: ChartPoint?) -> [ChartPoint] {
+        points + [current].compactMap { $0 }
+    }
+
+    /// The dashed what-if line, anchored on the solid line's last point so it
+    /// reads as a continuation. Empty when there's nothing to project.
+    static func projectionPoints(_ projection: [ChartPoint], from line: [ChartPoint]) -> [ChartPoint] {
+        guard !projection.isEmpty else { return [] }
+        return [line.last].compactMap { $0 } + projection
     }
 
     /// One leg of the line: the pair of points it spans, and which way it went.
@@ -80,10 +106,11 @@ public struct SlopeColoredLineChart: View {
     }
 
     public var body: some View {
-        Chart {
+        let line = Self.linePoints(points, current: current)
+        return Chart {
             // Each segment is its own series so it can carry its own color;
             // a single series would take one style for the whole line.
-            ForEach(Self.segments(from: points)) { segment in
+            ForEach(Self.segments(from: line)) { segment in
                 LineMark(
                     x: .value("Date", segment.start.start, unit: .day),
                     y: .value("Value", segment.start.value),
@@ -110,6 +137,25 @@ public struct SlopeColoredLineChart: View {
                     .foregroundStyle(pointColor.map(AnyShapeStyle.init) ?? AnyShapeStyle(.primary))
                 }
             }
+            ForEach(Array(Self.projectionPoints(projection, from: line).enumerated()), id: \.offset) { _, point in
+                LineMark(
+                    x: .value("Date", point.start, unit: .day),
+                    y: .value("Value", point.value),
+                    series: .value("Projection", "projection")
+                )
+                .foregroundStyle(.secondary)
+                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                .symbol(.circle)
+                .symbolSize(16)
+            }
+            if let current {
+                PointMark(
+                    x: .value("Date", current.start, unit: .day),
+                    y: .value("Value", current.value)
+                )
+                .foregroundStyle(currentColor)
+                .symbolSize(90)
+            }
         }
         .chartYScale(domain: yDomain)
         .chartYAxis {
@@ -132,6 +178,22 @@ public struct SlopeColoredLineChart: View {
         points: SwChartsSamples.weekly,
         yDomain: 178...183,
         yAxisLabel: { String(format: "%.1f", $0) }
+    )
+    .padding()
+}
+
+#Preview("SlopeColoredLineChart — current + projection") {
+    let last = SwChartsSamples.weekly.last!
+    let week: TimeInterval = 7 * 86_400
+    SlopeColoredLineChart(
+        points: Array(SwChartsSamples.weekly.dropLast()),
+        yDomain: 178...186,
+        yAxisLabel: { String(format: "%.1f", $0) },
+        current: last,
+        projection: (1...3).map {
+            ChartPoint(start: last.start.addingTimeInterval(Double($0) * week),
+                       value: last.value * pow(1.01, Double($0)))
+        }
     )
     .padding()
 }
