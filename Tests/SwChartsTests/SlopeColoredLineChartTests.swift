@@ -42,4 +42,21 @@ final class SlopeColoredLineChartTests: XCTestCase {
         let segments = SlopeColoredLineChart.segments(from: points([3, 3]))
         XCTAssertTrue(segments[0].isRising)
     }
+
+    // MARK: - current + projection
+
+    func testCurrentJoinsTheLine() {
+        let history = points([1, 2])
+        let current = ChartPoint(start: history[1].start.addingTimeInterval(86_400), value: 3)
+        XCTAssertEqual(SlopeColoredLineChart.linePoints(history, current: current), history + [current])
+        XCTAssertEqual(SlopeColoredLineChart.linePoints(history, current: nil), history)
+    }
+
+    func testProjectionAnchorsOnLastLinePoint() {
+        let line = points([1, 2])
+        let ahead = points([5, 6, 7]).suffix(1).map { $0 }
+        XCTAssertEqual(SlopeColoredLineChart.projectionPoints(ahead, from: line), [line[1]] + ahead)
+        XCTAssertTrue(SlopeColoredLineChart.projectionPoints([], from: line).isEmpty)
+        XCTAssertEqual(SlopeColoredLineChart.projectionPoints(ahead, from: []), ahead)
+    }
 }
