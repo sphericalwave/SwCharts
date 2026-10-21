@@ -64,18 +64,20 @@ public struct PeriodBucketer: Sendable {
     }
 
     /// The `period.bucketCount` buckets ending with the one containing `now`,
-    /// oldest first.
+    /// oldest first. Pass `bucketCount` to give one chart a shorter or longer
+    /// window (e.g. 14 days) without changing the house default.
     public func buckets(
         for samples: [DatedSample],
         period: ChartPeriod,
         aggregation: MetricAggregation,
-        now: Date = .now
+        now: Date = .now,
+        bucketCount: Int? = nil
     ) -> [PeriodBucket] {
         let daily = dailyValues(samples, aggregation: aggregation)
         let current = calendar.dateInterval(of: period.component, for: now)?.start
             ?? calendar.startOfDay(for: now)
 
-        return (0..<period.bucketCount).reversed().compactMap { offset in
+        return (0..<max(bucketCount ?? period.bucketCount, 0)).reversed().compactMap { offset in
             guard let start = calendar.date(byAdding: period.component, value: -offset, to: current),
                   let end = calendar.date(byAdding: period.component, value: 1, to: start)
             else { return nil }
