@@ -47,6 +47,13 @@ final class PeriodBucketerTests: XCTestCase {
         XCTAssertTrue(buckets.allSatisfy { !$0.isPartial }, "Day buckets are never partial")
     }
 
+    func testBucketCountOverridesTheDefaultWindow() {
+        let buckets = bucketer.buckets(for: [], period: .day, aggregation: .sum, now: now, bucketCount: 14)
+        XCTAssertEqual(buckets.count, 14)
+        XCTAssertEqual(buckets.last?.start, date(2026, 10, 8))
+        XCTAssertEqual(buckets.first?.start, date(2026, 9, 25))
+    }
+
     func testWeekWindowIs12MondayStartedWeeks() {
         let buckets = bucketer.buckets(for: [], period: .week, aggregation: .sum, now: now)
         XCTAssertEqual(buckets.count, 12)
