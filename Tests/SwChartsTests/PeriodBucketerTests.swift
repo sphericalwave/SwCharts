@@ -292,6 +292,13 @@ final class PeriodChartViewHelperTests: XCTestCase {
                        [2, 5, 8, 11].map { weeks[$0].start })
     }
 
+    func testWholeTicksAreWholeAndAtMostFive() {
+        XCTAssertEqual(PeriodChartView.wholeTicks(in: 0...1.15), [0, 1])
+        XCTAssertEqual(PeriodChartView.wholeTicks(in: -0.3...2.4), [0, 1, 2])
+        XCTAssertEqual(PeriodChartView.wholeTicks(in: 0...12), [0, 3, 6, 9, 12])
+        XCTAssertEqual(PeriodChartView.wholeTicks(in: 0.2...0.8), [])
+    }
+
     func testBarDomainStartsAtZeroWithHeadroom() {
         func check(_ values: [Double], _ lo: Double, _ hi: Double) {
             let d = PeriodChartView.barDomain(values: values)
