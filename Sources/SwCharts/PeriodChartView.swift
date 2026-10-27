@@ -18,7 +18,8 @@ import Charts
 ///   from (the lift behind a weekly max), in the header and on the selected
 ///   point;
 /// - optionally a `PeriodGoal`: a dashed goal line across each bucket (scaled
-///   per period for `.sum` metrics) and each bar/point tinted hit or miss.
+///   per period for `.sum` metrics) and each bar/point tinted hit or miss;
+/// - optionally `wholeNumbers` y ticks, for counts (sessions, sets).
 ///
 /// Empty buckets are gaps, not zeros. Pair it with a `PeriodPicker` in the
 /// navigation bar's principal slot. Renders plain content — wrap it in your
@@ -48,6 +49,7 @@ public struct PeriodChartView: View {
     private let missColor: Color
     private let height: CGFloat
     private let bucketDetail: ((PeriodBucket) -> String?)?
+    private let wholeNumbers: Bool
 
     @State private var selectedDate: Date?
 
@@ -66,6 +68,7 @@ public struct PeriodChartView: View {
         missColor: Color = .orange,
         height: CGFloat = 160,
         bucketDetail: ((PeriodBucket) -> String?)? = nil,
+        wholeNumbers: Bool = false,
         bucketer: PeriodBucketer = PeriodBucketer(),
         now: Date = .now
     ) {
@@ -86,6 +89,7 @@ public struct PeriodChartView: View {
         self.missColor = missColor
         self.height = height
         self.bucketDetail = bucketDetail
+        self.wholeNumbers = wholeNumbers
     }
 
     private var selectedBucket: PeriodBucket? {
@@ -202,12 +206,13 @@ public struct PeriodChartView: View {
             }
         }
         .chartYAxis {
-            AxisMarks { value in
-                AxisGridLine()
-                AxisValueLabel {
-                    if let value = value.as(Double.self) {
-                        Text(valueLabel(value))
-                    }
+            if wholeNumbers {
+                AxisMarks(values: Self.wholeTicks(in: yDomain)) { value in
+                    yAxisMark(value)
+                }
+            } else {
+                AxisMarks { value in
+                    yAxisMark(value)
                 }
             }
         }
@@ -219,6 +224,16 @@ public struct PeriodChartView: View {
                 .onChanged { proxy.selectXValue(at: $0.location.x) }
         }
         .frame(height: height)
+    }
+
+    @AxisMarkBuilder
+    private func yAxisMark(_ value: AxisValue) -> some AxisMark {
+        AxisGridLine()
+        AxisValueLabel {
+            if let value = value.as(Double.self) {
+                Text(valueLabel(value))
+            }
+        }
     }
 
     /// Buckets with data, each plotted at its midpoint.
@@ -395,6 +410,15 @@ public struct PeriodChartView: View {
         let hi = Swift.max(values.max() ?? 0, 0)
         let span = Swift.max(hi - lo, 1)
         return lo...(lo + span * 1.15)
+    }
+
+    /// Whole-number y ticks inside `domain`, for counts: at most five, a
+    /// whole step apart — 0, 1, 2 rather than 0, 0.5, 1, 1.5, 2.
+    static func wholeTicks(in domain: ClosedRange<Double>) -> [Double] {
+        let lo = domain.lowerBound.rounded(.up), hi = domain.upperBound.rounded(.down)
+        guard lo <= hi else { return [] }
+        let step = Swift.max(1, ((hi - lo) / 4).rounded(.up))
+        return Array(stride(from: lo, through: hi, by: step))
     }
 
     /// Every 7th day / 3rd week / 3rd month, counted back from the newest so
