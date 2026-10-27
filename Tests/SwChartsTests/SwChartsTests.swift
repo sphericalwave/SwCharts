@@ -1,7 +1,7 @@
 import XCTest
-@testable import ChartKit
+@testable import SwCharts
 
-final class ChartKitTests: XCTestCase {
+final class SwChartsTests: XCTestCase {
 
     // MARK: - ChartTimeframe
 
@@ -98,6 +98,36 @@ final class ChartKitTests: XCTestCase {
         let label = PeriodGoalBarChart.label(
             for: ChartPoint(start: date, value: 0), index: 0, scale: .day)
         XCTAssertEqual(label, "8/5")
+    }
+
+    // MARK: - PeriodGoalBarChart.availableScales
+
+    private var twoPointsEveryScale: PeriodGoalBarChart.DataSet {
+        let pts = [ChartPoint(start: .now, value: 1), ChartPoint(start: .now, value: 2)]
+        return .init(hour: pts, day: pts, week: pts, month: pts, quarter: pts, year: pts)
+    }
+
+    func testAvailableScalesDefaultsToEveryScaleWithData() {
+        let scales = PeriodGoalBarChart.availableScales(
+            data: twoPointsEveryScale, offered: ChartTimeframe.allCases, minimumPoints: 2)
+        XCTAssertEqual(scales, ChartTimeframe.allCases)
+    }
+
+    func testAvailableScalesDropsUnofferedScaleEvenWithData() {
+        let scales = PeriodGoalBarChart.availableScales(
+            data: twoPointsEveryScale, offered: [.year, .day, .week], minimumPoints: 2)
+        // Timeframe order, not the order offered.
+        XCTAssertEqual(scales, [.day, .week, .year])
+        let noYear = PeriodGoalBarChart.availableScales(
+            data: twoPointsEveryScale, offered: [.day, .week, .month, .quarter], minimumPoints: 2)
+        XCTAssertFalse(noYear.contains(.year))
+    }
+
+    func testAvailableScalesStillRequiresMinimumPoints() {
+        let one = [ChartPoint(start: .now, value: 1)]
+        let scales = PeriodGoalBarChart.availableScales(
+            data: .init(day: one), offered: [.day], minimumPoints: 2)
+        XCTAssertEqual(scales, [])
     }
 
     // MARK: - NetPeriodBarChart.paddedDomain

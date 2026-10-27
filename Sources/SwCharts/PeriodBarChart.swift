@@ -199,7 +199,7 @@ public struct PeriodBarChart: View {
 #if DEBUG
 #Preview("PeriodBarChart") {
     Form {
-        PeriodBarChart(data: ChartKitSamples.weightData, selection: .constant(.week))
+        PeriodBarChart(data: SwChartsSamples.weightData, selection: .constant(.week))
     }
 }
 #endif

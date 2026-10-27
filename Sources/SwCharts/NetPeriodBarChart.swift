@@ -209,7 +209,7 @@ public struct NetPeriodBarChart: View {
     Form {
         Section {
             NetPeriodBarChart(
-                data: ChartKitSamples.netCalorieData,
+                data: SwChartsSamples.netCalorieData,
                 selection: .constant(.week),
                 title: "Net Calories"
             )

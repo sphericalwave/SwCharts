@@ -4,7 +4,7 @@ import Foundation
 /// Shared sample data for `#Preview` blocks and the README screenshot
 /// generator (`ScreenshotGenTests`), so both render the same content.
 /// DEBUG-only: never compiled into release builds of the library.
-enum ChartKitSamples {
+enum SwChartsSamples {
     private static let reference = Date(timeIntervalSince1970: 1_700_000_000)
 
     private static func series(_ values: [Double], step: Calendar.Component) -> [ChartPoint] {
@@ -27,6 +27,30 @@ enum ChartKitSamples {
 
     static var netCalorieData: PeriodBarChart.DataSet {
         .init(week: netCalorieWeekly, month: netCalorieMonthly)
+    }
+
+    /// Fixed "now" for `PeriodChartView` samples, so renders are stable.
+    static let now = reference
+
+    /// ~100 days of samples ending at `now`, skipping every 5th day so the
+    /// charts show how gaps are handled.
+    private static func daily(_ value: (Int) -> Double) -> [DatedSample] {
+        let cal = Calendar(identifier: .gregorian)
+        return (0..<100).compactMap { daysAgo in
+            guard daysAgo % 5 != 3,
+                  let date = cal.date(byAdding: .day, value: -daysAgo, to: now) else { return nil }
+            return DatedSample(date: date, value: value(daysAgo))
+        }
+    }
+
+    static let dailyWeight = daily { daysAgo in
+        let d = Double(daysAgo)
+        let trend: Double = 178 + d * 0.05
+        return trend + sin(d / 3) * 0.6
+    }
+    static let dailyCalories = daily { daysAgo in
+        let wave: Double = cos(Double(daysAgo) / 2) * 350
+        return 2_300 + wave
     }
 }
 #endif

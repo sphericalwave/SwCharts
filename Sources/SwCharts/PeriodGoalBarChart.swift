@@ -12,6 +12,8 @@ import Charts
 /// bar sit alongside the data bars on any scale.
 ///
 /// Scales with fewer than `minimumPoints` points are hidden from the picker.
+/// Pass `offeredScales` to keep a scale out of the picker entirely — even when
+/// there's data for it, and while loading.
 ///
 /// Renders plain content (no `Section` wrapper) so the host decides the
 /// container — drop it in a `Section` inside a `Form`, or in a custom card row.
@@ -32,6 +34,7 @@ public struct PeriodGoalBarChart: View {
     private let emptyTitle: String
     private let emptyMessage: String
     private let showsScalePicker: Bool
+    private let offeredScales: [ChartTimeframe]
 
     @State private var selectedLabel: String?
 
@@ -51,7 +54,8 @@ public struct PeriodGoalBarChart: View {
         minimumPoints: Int = 2,
         emptyTitle: String = "No data",
         emptyMessage: String = "Not enough data yet.",
-        showsScalePicker: Bool = true
+        showsScalePicker: Bool = true,
+        offeredScales: [ChartTimeframe] = ChartTimeframe.allCases
     ) {
         self.data = data
         self._selection = selection
@@ -65,10 +69,19 @@ public struct PeriodGoalBarChart: View {
         self.emptyTitle = emptyTitle
         self.emptyMessage = emptyMessage
         self.showsScalePicker = showsScalePicker
+        self.offeredScales = offeredScales
     }
 
     private var availableScales: [ChartTimeframe] {
-        ChartTimeframe.allCases.filter { data.points(for: $0).count >= minimumPoints }
+        Self.availableScales(data: data, offered: offeredScales, minimumPoints: minimumPoints)
+    }
+
+    /// The offered scales with enough points to plot, in timeframe order.
+    /// Pure so it's unit-testable.
+    static func availableScales(data: DataSet, offered: [ChartTimeframe], minimumPoints: Int) -> [ChartTimeframe] {
+        ChartTimeframe.allCases.filter {
+            offered.contains($0) && data.points(for: $0).count >= minimumPoints
+        }
     }
 
     /// Padded domain around the data (and goal, if any). Pure so it's unit-testable.
@@ -126,7 +139,7 @@ public struct PeriodGoalBarChart: View {
         VStack(alignment: .leading, spacing: 8) {
             ProgressView()
                 .frame(maxWidth: .infinity, minHeight: 160)
-            picker(scales: ChartTimeframe.allCases)
+            picker(scales: ChartTimeframe.allCases.filter(offeredScales.contains))
         }
         .padding(.vertical, 4)
     }
@@ -277,7 +290,7 @@ private extension ChartContent {
     Form {
         Section {
             PeriodGoalBarChart(
-                data: ChartKitSamples.weightData,
+                data: SwChartsSamples.weightData,
                 selection: .constant(.month),
                 goal: 178,
                 title: "Weight (lbs)",

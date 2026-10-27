@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "ChartKit",
+    name: "SwCharts",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "ChartKit", targets: ["ChartKit"]),
+        .library(name: "SwCharts", targets: ["SwCharts"]),
     ],
     targets: [
-        .target(name: "ChartKit"),
-        .testTarget(name: "ChartKitTests", dependencies: ["ChartKit"]),
+        .target(name: "SwCharts"),
+        .testTarget(name: "SwChartsTests", dependencies: ["SwCharts"]),
     ]
 )

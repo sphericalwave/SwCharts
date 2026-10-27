@@ -1,5 +1,5 @@
 import XCTest
-@testable import ChartKit
+@testable import SwCharts
 
 final class SlopeColoredSeriesChartTests: XCTestCase {
 
