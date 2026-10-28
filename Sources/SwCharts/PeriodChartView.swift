@@ -19,7 +19,9 @@ import Charts
 ///   point;
 /// - optionally a `PeriodGoal`: a dashed goal line across each bucket (scaled
 ///   per period for `.sum` metrics) and each bar/point tinted hit or miss;
-/// - optionally `wholeNumbers` y ticks, for counts (sessions, sets).
+/// - optionally `wholeNumbers` y ticks, for counts (sessions, sets);
+/// - tap/drag to read any bucket, unless `selectable` is off — e.g. inside
+///   a swipeable pager, where the drag would fight the page swipe.
 ///
 /// Empty buckets are gaps, not zeros. Pair it with a `PeriodPicker` in the
 /// navigation bar's principal slot. Renders plain content — wrap it in your
@@ -50,6 +52,7 @@ public struct PeriodChartView: View {
     private let height: CGFloat
     private let bucketDetail: ((PeriodBucket) -> String?)?
     private let wholeNumbers: Bool
+    private let selectable: Bool
 
     @State private var selectedDate: Date?
 
@@ -69,6 +72,7 @@ public struct PeriodChartView: View {
         height: CGFloat = 160,
         bucketDetail: ((PeriodBucket) -> String?)? = nil,
         wholeNumbers: Bool = false,
+        selectable: Bool = true,
         bucketer: PeriodBucketer = PeriodBucketer(),
         now: Date = .now
     ) {
@@ -90,6 +94,7 @@ public struct PeriodChartView: View {
         self.height = height
         self.bucketDetail = bucketDetail
         self.wholeNumbers = wholeNumbers
+        self.selectable = selectable
     }
 
     private var selectedBucket: PeriodBucket? {
@@ -174,7 +179,25 @@ public struct PeriodChartView: View {
 
     // MARK: Chart
 
+    @ViewBuilder
     private var chart: some View {
+        if selectable {
+            plot
+                .chartXSelection(value: $selectedDate)
+                .chartGesture { proxy in
+                    // Zero distance so a tap selects too; no .onEnded so the
+                    // selection stays readable after the finger lifts.
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { proxy.selectXValue(at: $0.location.x) }
+                }
+                .frame(height: height)
+        } else {
+            plot
+                .frame(height: height)
+        }
+    }
+
+    private var plot: some View {
         Chart {
             if let average = summary.windowAverage {
                 RuleMark(y: .value("Average", average))
@@ -216,14 +239,6 @@ public struct PeriodChartView: View {
                 }
             }
         }
-        .chartXSelection(value: $selectedDate)
-        .chartGesture { proxy in
-            // Zero distance so a tap selects too; no .onEnded so the
-            // selection stays readable after the finger lifts.
-            DragGesture(minimumDistance: 0)
-                .onChanged { proxy.selectXValue(at: $0.location.x) }
-        }
-        .frame(height: height)
     }
 
     @AxisMarkBuilder
