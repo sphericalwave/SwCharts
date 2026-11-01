@@ -140,8 +140,12 @@ Pieces, usable on their own:
   instance — a clock chart wants time labels and a domain a few minutes wider
   than the recorded range, a percentage chart wants `"%"` labels and a clamped
   domain. `risingColor`/`fallingColor` are yours to set too, since "up" isn't
-  good for every metric. Renders plain content — wrap it in your own `Section`
-  or card.
+  good for every metric. Pass `interpolation: .catmullRom` for one smooth curve
+  that still colors each segment and dashes the projection (`PeriodChartView`'s
+  `.line` style takes the same option). The curve is `CatmullRomSpline`:
+  Catmull-Rom tangents in x, limited so no segment overshoots its endpoints — a
+  jump from 0 never dips below 0. Renders plain content — wrap it in your own
+  `Section` or card.
 - `SlopeColoredSeriesChart` — the same trend-colored line for a series that
   isn't dated: x is a plain `Double` (a round number, seconds elapsed, a set
   index) instead of a calendar-day bucket, so per-round or per-second data
