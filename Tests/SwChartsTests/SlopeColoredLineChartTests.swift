@@ -59,4 +59,25 @@ final class SlopeColoredLineChartTests: XCTestCase {
         XCTAssertTrue(SlopeColoredLineChart.projectionPoints([], from: line).isEmpty)
         XCTAssertEqual(SlopeColoredLineChart.projectionPoints(ahead, from: []), ahead)
     }
+
+    // MARK: - curves(line:projection:)
+
+    func testCurvesSplitSolidLineFromProjection() {
+        let all = points([1, 5, 2, 4])
+        let curves = SlopeColoredLineChart.curves(line: Array(all.prefix(3)), projection: [all[3]])
+        XCTAssertEqual(curves.map(\.isProjection), [false, false, true])
+        XCTAssertEqual(curves.map(\.isRising), [true, false, true])
+    }
+
+    func testCurvesPassThroughDayCentredPoints() {
+        let all = points([1, 5, 2])
+        let curves = SlopeColoredLineChart.curves(line: all, projection: [])
+        XCTAssertEqual(curves.first?.samples.first, all[0].centered(in: .day))
+        XCTAssertEqual(curves.last?.samples.last, all[2].centered(in: .day))
+    }
+
+    func testCurvesWithoutProjectionAreAllSolid() {
+        let curves = SlopeColoredLineChart.curves(line: points([1, 2, 3]), projection: [])
+        XCTAssertFalse(curves.contains { $0.isProjection })
+    }
 }

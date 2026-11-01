@@ -21,7 +21,10 @@ import Charts
 ///   per period for `.sum` metrics) and each bar/point tinted hit or miss;
 /// - optionally `wholeNumbers` y ticks, for counts (sessions, sets);
 /// - tap/drag to read any bucket, unless `selectable` is off — e.g. inside
-///   a swipeable pager, where the drag would fight the page swipe.
+///   a swipeable pager, where the drag would fight the page swipe;
+/// - optionally, for `.line`, `interpolation: .catmullRom`: one smooth
+///   `CatmullRomSpline` curve that keeps each segment's rising/falling color
+///   and the dashed, faded "so far" leg.
 ///
 /// Empty buckets are gaps, not zeros. Pair it with a `PeriodPicker` in the
 /// navigation bar's principal slot. Renders plain content — wrap it in your
@@ -53,6 +56,7 @@ public struct PeriodChartView: View {
     private let bucketDetail: ((PeriodBucket) -> String?)?
     private let wholeNumbers: Bool
     private let selectable: Bool
+    private let interpolation: LineInterpolation
 
     @State private var selectedDate: Date?
 
@@ -73,6 +77,7 @@ public struct PeriodChartView: View {
         bucketDetail: ((PeriodBucket) -> String?)? = nil,
         wholeNumbers: Bool = false,
         selectable: Bool = true,
+        interpolation: LineInterpolation = .linear,
         bucketer: PeriodBucketer = PeriodBucketer(),
         now: Date = .now
     ) {
@@ -95,6 +100,7 @@ public struct PeriodChartView: View {
         self.bucketDetail = bucketDetail
         self.wholeNumbers = wholeNumbers
         self.selectable = selectable
+        self.interpolation = interpolation
     }
 
     private var selectedBucket: PeriodBucket? {
@@ -205,7 +211,12 @@ public struct PeriodChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
             }
             if style == .line {
-                lineMarks
+                if interpolation == .catmullRom {
+                    smoothLineMarks
+                } else {
+                    lineMarks
+                }
+                pointMarks
             } else {
                 barMarks
             }
@@ -282,6 +293,33 @@ public struct PeriodChartView: View {
                 .lineStyle(StrokeStyle(lineWidth: 2, dash: isPartial ? [4, 3] : []))
             }
         }
+    }
+
+    /// `lineMarks` as one smooth curve, sampled per segment so each segment
+    /// keeps its own color and the "so far" leg its dash.
+    @ChartContentBuilder
+    private var smoothLineMarks: some ChartContent {
+        let plotted = plotted
+        let curves = CatmullRomSpline.segments(through: plotted.map(\.point))
+        let endsPartial = plotted.last?.bucket.isPartial == true
+        ForEach(Array(curves.enumerated()), id: \.offset) { index, samples in
+            let isPartial = endsPartial && index == curves.count - 1
+            let isRising = (samples.last?.value ?? 0) >= (samples.first?.value ?? 0)
+            let color = isRising ? risingColor : fallingColor
+            ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
+                LineMark(
+                    x: .value("Date", sample.start),
+                    y: .value("Value", sample.value),
+                    series: .value("Segment", index)
+                )
+                .foregroundStyle(color.opacity(isPartial ? 0.4 : 1))
+                .lineStyle(StrokeStyle(lineWidth: 2, dash: isPartial ? [4, 3] : []))
+            }
+        }
+    }
+
+    @ChartContentBuilder
+    private var pointMarks: some ChartContent {
         ForEach(plotted) { entry in
             let isSelected = entry.bucket.id == selectedBucket?.id
             PointMark(
@@ -290,7 +328,7 @@ public struct PeriodChartView: View {
             )
             .symbolSize(isSelected ? 80 : 24)
             .foregroundStyle(pointColor(for: entry.bucket).opacity(entry.bucket.isPartial ? 0.4 : 1))
-            .annotation(position: .top, alignment: .center, spacing: 4) {
+            .annotation(position: .top, alignment: .center, spacing: 4, overflowResolution: Self.annotationOverflow) {
                 annotation(for: entry.bucket, isSelected: isSelected)
             }
         }
@@ -311,7 +349,7 @@ public struct PeriodChartView: View {
                 yEnd: .value("Value", entry.point.value)
             )
             .foregroundStyle((isSelected ? Color.primary : fillColor(for: entry.bucket)).opacity(entry.bucket.isPartial ? 0.35 : 1))
-            .annotation(position: .top, alignment: .center, spacing: 2) {
+            .annotation(position: .top, alignment: .center, spacing: 2, overflowResolution: Self.annotationOverflow) {
                 annotation(for: entry.bucket, isSelected: isSelected)
             }
         }
@@ -353,6 +391,10 @@ public struct PeriodChartView: View {
         case nil:   return .primary
         }
     }
+
+    /// Keep a selected value's label inside the chart's width — centered on
+    /// the first or last bucket it would run off the edge and clip.
+    private static let annotationOverflow = AnnotationOverflowResolution(x: .fit(to: .chart), y: .automatic)
 
     @ViewBuilder
     private func annotation(for bucket: PeriodBucket, isSelected: Bool) -> some View {
