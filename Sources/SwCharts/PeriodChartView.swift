@@ -12,16 +12,18 @@ import Charts
 /// - the buckets as a trend-colored line (`.line`, the `SlopeColoredLineChart`
 ///   look) or bars (`.bar`), with a dashed rule at the window average;
 /// - the current, unfinished week or month faded and labelled "so far";
-/// - drag-to-read: slide a finger across the chart and the header shows the
-///   bucket under it. The selection stays after the finger lifts;
+/// - press-and-drag to read: hold a finger on the chart for a moment, then
+///   slide it, and the header shows the bucket under it. Lifting the finger
+///   clears it and the header goes back to the latest period. A swipe that
+///   moves before the hold registers is left to the container (a paged
+///   `TabView`, a `ScrollView`), so it selects nothing;
 /// - optionally a `bucketDetail` line naming what a bucket's value came
 ///   from (the lift behind a weekly max), in the header and on the selected
 ///   point;
 /// - optionally a `PeriodGoal`: a dashed goal line across each bucket (scaled
 ///   per period for `.sum` metrics) and each bar/point tinted hit or miss;
 /// - optionally `wholeNumbers` y ticks, for counts (sessions, sets);
-/// - tap/drag to read any bucket, unless `selectable` is off — e.g. inside
-///   a swipeable pager, where the drag would fight the page swipe;
+/// - press-and-drag reading can be turned off with `selectable: false`;
 /// - optionally, for `.line`, `interpolation: .catmullRom`: one smooth
 ///   `CatmullRomSpline` curve that keeps each segment's rising/falling color
 ///   and the dashed, faded "so far" leg.
@@ -59,6 +61,10 @@ public struct PeriodChartView: View {
     private let interpolation: LineInterpolation
 
     @State private var selectedDate: Date?
+    /// True while a press-and-drag scrub is in progress. Gesture state
+    /// resets on lift and on cancel (a pager or scroll view taking the
+    /// touch), and that reset clears `selectedDate`.
+    @GestureState private var isScrubbing = false
 
     public init(
         title: String,
@@ -191,10 +197,21 @@ public struct PeriodChartView: View {
             plot
                 .chartXSelection(value: $selectedDate)
                 .chartGesture { proxy in
-                    // Zero distance so a tap selects too; no .onEnded so the
-                    // selection stays readable after the finger lifts.
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { proxy.selectXValue(at: $0.location.x) }
+                    // A short hold before scrubbing: a swipe that moves
+                    // first fails the long press, so the touch goes to the
+                    // enclosing pager/scroll view and nothing is selected.
+                    LongPressGesture(minimumDuration: Self.scrubHoldDuration,
+                                     maximumDistance: Self.scrubHoldSlop)
+                        .sequenced(before: DragGesture(minimumDistance: 0))
+                        .updating($isScrubbing) { value, state, _ in
+                            state = Self.scrubActive(value)
+                        }
+                        .onChanged { value in
+                            if let x = Self.scrubX(value) { proxy.selectXValue(at: x) }
+                        }
+                }
+                .onChange(of: isScrubbing) {
+                    if !isScrubbing { selectedDate = nil }
                 }
                 .frame(height: height)
         } else {
@@ -451,6 +468,28 @@ public struct PeriodChartView: View {
 
     static func midpoint(of bucket: PeriodBucket) -> Date {
         bucket.start.addingTimeInterval(bucket.end.timeIntervalSince(bucket.start) / 2)
+    }
+
+    /// How long a finger must rest on the chart before a drag scrubs. Short
+    /// enough to feel immediate, long enough that a page swipe moves first.
+    static let scrubHoldDuration: Double = 0.15
+    /// How far the finger may move during the hold; past this the long press
+    /// fails and the swipe belongs to the container.
+    static let scrubHoldSlop: CGFloat = 10
+
+    typealias ScrubValue = SequenceGesture<LongPressGesture, DragGesture>.Value
+
+    /// Scrubbing once the hold has completed, until the finger lifts.
+    static func scrubActive(_ value: ScrubValue) -> Bool {
+        if case .second(true, _) = value { return true }
+        return false
+    }
+
+    /// The x to select: the drag's location once the hold has completed and
+    /// the finger has moved; `nil` during the hold.
+    static func scrubX(_ value: ScrubValue) -> CGFloat? {
+        if case .second(true, let drag?) = value { return drag.location.x }
+        return nil
     }
 
     /// The bucket with data whose midpoint is closest to `date` — what the
