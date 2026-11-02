@@ -26,7 +26,12 @@ import Charts
 /// - press-and-drag reading can be turned off with `selectable: false`;
 /// - optionally, for `.line`, `interpolation: .catmullRom`: one smooth
 ///   `CatmullRomSpline` curve that keeps each segment's rising/falling color
-///   and the dashed, faded "so far" leg.
+///   and the dashed, faded "so far" leg;
+/// - optionally a `bucketCount` window other than the period's default
+///   (e.g. 14 days), and `trimLeadingEmpty` to start the window at the first
+///   bucket with data instead of showing empty leading buckets;
+/// - optionally a `reference` line: a fixed, labelled dashed level (e.g.
+///   "isotonic 9 g/L") with no hit/miss tint — unlike a `goal`.
 ///
 /// Empty buckets are gaps, not zeros. Pair it with a `PeriodPicker` in the
 /// navigation bar's principal slot. Renders plain content — wrap it in your
@@ -59,6 +64,19 @@ public struct PeriodChartView: View {
     private let wholeNumbers: Bool
     private let selectable: Bool
     private let interpolation: LineInterpolation
+    private let reference: Reference?
+
+    /// A fixed level drawn as a labelled dashed line. Purely visual: it
+    /// doesn't tint buckets, count hits or change the header.
+    public struct Reference: Sendable {
+        public let value: Double
+        public let label: String?
+
+        public init(_ value: Double, label: String? = nil) {
+            self.value = value
+            self.label = label
+        }
+    }
 
     @State private var selectedDate: Date?
     /// True while a press-and-drag scrub is in progress. Gesture state
@@ -84,10 +102,15 @@ public struct PeriodChartView: View {
         wholeNumbers: Bool = false,
         selectable: Bool = true,
         interpolation: LineInterpolation = .linear,
+        bucketCount: Int? = nil,
+        trimLeadingEmpty: Bool = false,
+        reference: Reference? = nil,
         bucketer: PeriodBucketer = PeriodBucketer(),
         now: Date = .now
     ) {
-        let buckets = bucketer.buckets(for: samples, period: period, aggregation: aggregation, now: now)
+        let all = bucketer.buckets(for: samples, period: period, aggregation: aggregation,
+                                   now: now, bucketCount: bucketCount)
+        let buckets = trimLeadingEmpty ? Self.trimmingLeadingEmpty(all) : all
         self.title = title
         self.period = period
         self.aggregation = aggregation
@@ -107,6 +130,7 @@ public struct PeriodChartView: View {
         self.wholeNumbers = wholeNumbers
         self.selectable = selectable
         self.interpolation = interpolation
+        self.reference = reference
     }
 
     private var selectedBucket: PeriodBucket? {
@@ -238,6 +262,7 @@ public struct PeriodChartView: View {
                 barMarks
             }
             goalMarks
+            referenceMarks
         }
         .chartYScale(domain: yDomain)
         .chartXScale(domain: (buckets.first?.start ?? .now)...(buckets.last?.end ?? .now))
@@ -389,6 +414,22 @@ public struct PeriodChartView: View {
         }
     }
 
+    @ChartContentBuilder
+    private var referenceMarks: some ChartContent {
+        if let reference {
+            RuleMark(y: .value("Reference", reference.value))
+                .foregroundStyle(Color.secondary)
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                .annotation(position: .top, alignment: .leading, spacing: 2) {
+                    if let label = reference.label {
+                        Text(label)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+        }
+    }
+
     private func outcome(of bucket: PeriodBucket) -> PeriodGoal.Outcome? {
         goal?.outcome(for: bucket, aggregation: aggregation, calendar: calendar)
     }
@@ -446,10 +487,13 @@ public struct PeriodChartView: View {
         }
     }
 
-    /// Every bucket's goal, so the goal line is never clipped.
+    /// Every bucket's goal plus the reference level, so neither line is
+    /// clipped.
     private var goalTargets: [Double] {
-        guard let goal else { return [] }
-        return buckets.map { goal.target(for: $0, aggregation: aggregation, calendar: calendar) }
+        let goals = goal.map { goal in
+            buckets.map { goal.target(for: $0, aggregation: aggregation, calendar: calendar) }
+        } ?? []
+        return goals + [reference?.value].compactMap { $0 }
     }
 
     private var axisDates: [Date] {
@@ -464,6 +508,14 @@ public struct PeriodChartView: View {
     static func fullBucket(_ bucket: PeriodBucket, period: ChartPeriod, calendar: Calendar) -> PeriodBucket {
         let end = calendar.date(byAdding: period.component, value: 1, to: bucket.start) ?? bucket.end
         return PeriodBucket(start: bucket.start, end: end, value: bucket.value, isPartial: false)
+    }
+
+    /// `buckets` from the first one with data onward — the window starts at
+    /// the first data day. With no data at all, unchanged (the view shows
+    /// its "No data" message).
+    static func trimmingLeadingEmpty(_ buckets: [PeriodBucket]) -> [PeriodBucket] {
+        guard let first = buckets.firstIndex(where: { $0.value != nil }) else { return buckets }
+        return Array(buckets[first...])
     }
 
     static func midpoint(of bucket: PeriodBucket) -> Date {
