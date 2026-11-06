@@ -13,6 +13,9 @@ import Charts
 ///
 /// Scales with fewer than `minimumPoints` points are hidden from the picker.
 ///
+/// Tapping a bar to show its value is opt-in with `selectable: true`; by
+/// default touches pass through to the enclosing pager or scroll view.
+///
 /// Renders plain content (no `Section` wrapper) so the host decides the
 /// container — drop it in a `Section` inside a `Form`, or in a custom card row.
 public struct NetPeriodBarChart: View {
@@ -30,6 +33,7 @@ public struct NetPeriodBarChart: View {
     private let minimumPoints: Int
     private let emptyTitle: String
     private let emptyMessage: String
+    private let selectable: Bool
 
     @State private var selectedLabel: String?
 
@@ -47,7 +51,8 @@ public struct NetPeriodBarChart: View {
         isLoading: Bool = false,
         minimumPoints: Int = 2,
         emptyTitle: String = "No data",
-        emptyMessage: String = "Not enough data yet."
+        emptyMessage: String = "Not enough data yet.",
+        selectable: Bool = false
     ) {
         self.data = data
         self._selection = selection
@@ -59,6 +64,7 @@ public struct NetPeriodBarChart: View {
         self.minimumPoints = minimumPoints
         self.emptyTitle = emptyTitle
         self.emptyMessage = emptyMessage
+        self.selectable = selectable
     }
 
     private var availableScales: [ChartTimeframe] {
@@ -168,7 +174,7 @@ public struct NetPeriodBarChart: View {
     @ViewBuilder
     private func chart(points: [ChartPoint], scale: ChartTimeframe) -> some View {
         let domain = Self.paddedDomain(points: points)
-        Chart {
+        let chart = Chart {
             ForEach(Array(points.enumerated()), id: \.offset) { index, p in
                 let label = PeriodGoalBarChart.label(for: p, index: index, scale: scale)
                 BarMark(
@@ -191,7 +197,11 @@ public struct NetPeriodBarChart: View {
         }
         .frame(height: 160)
         .chartYScale(domain: domain)
-        .chartXSelection(value: $selectedLabel)
+        if selectable {
+            chart.chartXSelection(value: $selectedLabel)
+        } else {
+            chart
+        }
     }
 
     private func picker(scales: [ChartTimeframe]) -> some View {
