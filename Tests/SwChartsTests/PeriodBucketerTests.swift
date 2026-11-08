@@ -17,6 +17,32 @@ final class PeriodBucketerTests: XCTestCase {
     // Thursday 2026-10-08, mid-afternoon.
     private lazy var now = date(2026, 10, 8, 15, 30)
 
+    // MARK: - Long month windows
+
+    private func monthBuckets(_ count: Int) -> [PeriodBucket] {
+        bucketer.buckets(for: [sample(now, 1)], period: .month, aggregation: .max, now: now, bucketCount: count)
+    }
+
+    func testStandardMonthAxisIsUnchanged() {
+        let shown = PeriodChartView.axisBuckets(monthBuckets(12), period: .month)
+        XCTAssertEqual(shown.count, 4)
+        XCTAssertEqual(PeriodChartView.axisLabel(for: now, period: .month, calendar: cal), "Oct")
+    }
+
+    func testLongMonthAxisStepsToFit() {
+        XCTAssertEqual(PeriodChartView.axisBuckets(monthBuckets(24), period: .month).count, 4)
+        XCTAssertEqual(PeriodChartView.axisBuckets(monthBuckets(48), period: .month).count, 4)
+        // Eleven years of months: every other year.
+        let shown = PeriodChartView.axisBuckets(monthBuckets(140), period: .month)
+        XCTAssertEqual(shown.count, 6)
+        XCTAssertEqual(shown.last?.start, monthBuckets(140).last?.start, "the current month stays labelled")
+    }
+
+    func testLongMonthAxisLabelsNameTheYear() {
+        XCTAssertEqual(PeriodChartView.axisLabel(for: now, period: .month, bucketCount: 140, calendar: cal), "2026")
+        XCTAssertTrue(PeriodChartView.axisLabel(for: now, period: .month, bucketCount: 18, calendar: cal).contains("26"))
+    }
+
     // MARK: - ChartPeriod / MetricAggregation
 
     func testPeriodShortLabelsAndWindows() {
