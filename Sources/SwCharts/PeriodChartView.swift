@@ -31,7 +31,9 @@ import Charts
 ///   (e.g. 14 days), and `trimLeadingEmpty` to start the window at the first
 ///   bucket with data instead of showing empty leading buckets;
 /// - optionally a `reference` line: a fixed, labelled dashed level (e.g.
-///   "isotonic 9 g/L") with no hit/miss tint — unlike a `goal`.
+///   "isotonic 9 g/L") with no hit/miss tint — unlike a `goal`;
+/// - optionally a `windowLabel` naming a non-standard window ("all time"),
+///   for a `bucketCount` the period's own description would misstate.
 ///
 /// Empty buckets are gaps, not zeros. Pair it with a `PeriodPicker` in the
 /// navigation bar's principal slot. Renders plain content — wrap it in your
@@ -65,6 +67,7 @@ public struct PeriodChartView: View {
     private let selectable: Bool
     private let interpolation: LineInterpolation
     private let reference: Reference?
+    private let windowLabel: String?
 
     /// A fixed level drawn as a labelled dashed line. Purely visual: it
     /// doesn't tint buckets, count hits or change the header.
@@ -105,6 +108,7 @@ public struct PeriodChartView: View {
         bucketCount: Int? = nil,
         trimLeadingEmpty: Bool = false,
         reference: Reference? = nil,
+        windowLabel: String? = nil,
         bucketer: PeriodBucketer = PeriodBucketer(),
         now: Date = .now
     ) {
@@ -131,6 +135,7 @@ public struct PeriodChartView: View {
         self.selectable = selectable
         self.interpolation = interpolation
         self.reference = reference
+        self.windowLabel = windowLabel
     }
 
     private var selectedBucket: PeriodBucket? {
@@ -141,7 +146,7 @@ public struct PeriodChartView: View {
         VStack(alignment: .leading, spacing: 8) {
             header
             if summary.latest == nil {
-                Text("No data in the \(period.windowDescription).")
+                Text(windowLabel == nil ? "No data in the \(period.windowDescription)." : "No data yet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: height)
@@ -160,7 +165,7 @@ public struct PeriodChartView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.headline)
-                Text("\(period.adjective) \(aggregation.label) · \(period.windowDescription)")
+                Text("\(period.adjective) \(aggregation.label) · \(windowLabel ?? period.windowDescription)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let average = summary.windowAverage {
@@ -276,7 +281,7 @@ public struct PeriodChartView: View {
                     // ("week of Oct 5"), not the midpoint's Thursday.
                     if let date = value.as(Date.self) {
                         let start = buckets.last { $0.start <= date }?.start ?? date
-                        Text(Self.axisLabel(for: start, period: period, calendar: calendar))
+                        Text(Self.axisLabel(for: start, period: period, bucketCount: buckets.count, calendar: calendar))
                     }
                 }
             }
@@ -570,21 +575,32 @@ public struct PeriodChartView: View {
     }
 
     /// Every 7th day / 3rd week / 3rd month, counted back from the newest so
-    /// the current period is always labelled.
+    /// the current period is always labelled. A month window longer than the
+    /// standard year widens the step so the labels still fit: 6 months up to
+    /// two years, then whole years, about six labels at most.
     static func axisBuckets(_ buckets: [PeriodBucket], period: ChartPeriod) -> [PeriodBucket] {
-        let stride = period == .day ? 7 : 3
+        let stride: Int
+        switch (period, buckets.count) {
+        case (.day, _):                 stride = 7
+        case (.month, 13...24):         stride = 6
+        case (.month, 25...):           stride = 12 * ((buckets.count + 71) / 72)
+        default:                        stride = 3
+        }
         return buckets.reversed().enumerated()
             .filter { $0.offset % stride == 0 }
             .map(\.element)
             .reversed()
     }
 
-    static func axisLabel(for date: Date, period: ChartPeriod, calendar: Calendar) -> String {
+    static func axisLabel(for date: Date, period: ChartPeriod, bucketCount: Int = 12, calendar: Calendar) -> String {
         var style = Date.FormatStyle(timeZone: calendar.timeZone)
         style.calendar = calendar
         switch period {
         case .day, .week: return date.formatted(style.month(.abbreviated).day())
-        case .month:      return date.formatted(style.month(.abbreviated))
+        case .month:
+            if bucketCount > 24 { return date.formatted(style.year()) }
+            if bucketCount > 12 { return date.formatted(style.month(.abbreviated).year(.twoDigits)) }
+            return date.formatted(style.month(.abbreviated))
         }
     }
 
