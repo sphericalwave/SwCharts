@@ -12,18 +12,18 @@ import Charts
 /// - the buckets as a trend-colored line (`.line`, the `SlopeColoredLineChart`
 ///   look) or bars (`.bar`), with a dashed rule at the window average;
 /// - the current, unfinished week or month faded and labelled "so far";
-/// - press-and-drag to read: hold a finger on the chart for a moment, then
-///   slide it, and the header shows the bucket under it. Lifting the finger
-///   clears it and the header goes back to the latest period. A swipe that
-///   moves before the hold registers is left to the container (a paged
-///   `TabView`, a `ScrollView`), so it selects nothing;
+/// - opt-in press-and-drag to read (`selectable: true`): hold a finger on
+///   the chart for a moment, then slide it, and the header shows the bucket
+///   under it. Lifting the finger clears it and the header goes back to the
+///   latest period. A swipe that moves before the hold registers is left to
+///   the container (a paged `TabView`, a `ScrollView`), so it selects nothing;
 /// - optionally a `bucketDetail` line naming what a bucket's value came
 ///   from (the lift behind a weekly max), in the header and on the selected
 ///   point;
 /// - optionally a `PeriodGoal`: a dashed goal line across each bucket (scaled
 ///   per period for `.sum` metrics) and each bar/point tinted hit or miss;
 /// - optionally `wholeNumbers` y ticks, for counts (sessions, sets);
-/// - press-and-drag reading can be turned off with `selectable: false`;
+/// - not selectable by default: touches pass through to the container;
 /// - optionally, for `.line`, `interpolation: .catmullRom`: one smooth
 ///   `CatmullRomSpline` curve that keeps each segment's rising/falling color
 ///   and the dashed, faded "so far" leg;
@@ -103,7 +103,7 @@ public struct PeriodChartView: View {
         height: CGFloat = 160,
         bucketDetail: ((PeriodBucket) -> String?)? = nil,
         wholeNumbers: Bool = false,
-        selectable: Bool = true,
+        selectable: Bool = false,
         interpolation: LineInterpolation = .linear,
         bucketCount: Int? = nil,
         trimLeadingEmpty: Bool = false,

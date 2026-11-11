@@ -12,6 +12,9 @@ import Charts
 /// bar sit alongside the data bars on any scale.
 ///
 /// Scales with fewer than `minimumPoints` points are hidden from the picker.
+///
+/// Tapping a bar to show its value is opt-in with `selectable: true`; by
+/// default touches pass through to the enclosing pager or scroll view.
 /// Pass `offeredScales` to keep a scale out of the picker entirely — even when
 /// there's data for it, and while loading.
 ///
@@ -33,6 +36,7 @@ public struct PeriodGoalBarChart: View {
     private let minimumPoints: Int
     private let emptyTitle: String
     private let emptyMessage: String
+    private let selectable: Bool
     private let showsScalePicker: Bool
     private let offeredScales: [ChartTimeframe]
 
@@ -54,6 +58,7 @@ public struct PeriodGoalBarChart: View {
         minimumPoints: Int = 2,
         emptyTitle: String = "No data",
         emptyMessage: String = "Not enough data yet.",
+        selectable: Bool = false,
         showsScalePicker: Bool = true,
         offeredScales: [ChartTimeframe] = ChartTimeframe.allCases
     ) {
@@ -68,6 +73,7 @@ public struct PeriodGoalBarChart: View {
         self.minimumPoints = minimumPoints
         self.emptyTitle = emptyTitle
         self.emptyMessage = emptyMessage
+        self.selectable = selectable
         self.showsScalePicker = showsScalePicker
         self.offeredScales = offeredScales
     }
@@ -209,7 +215,7 @@ public struct PeriodGoalBarChart: View {
     @ViewBuilder
     private func chart(points: [ChartPoint], scale: ChartTimeframe, glow: Double) -> some View {
         let domain = Self.paddedDomain(points: points, goal: goal)
-        Chart {
+        let chart = Chart {
             // Bars start at the domain floor, not 0. With a non-zero y-domain a
             // plain `y:` BarMark still draws from 0 — far below the plot — and
             // that overflow isn't always clipped by the host container (a `List`
@@ -248,7 +254,11 @@ public struct PeriodGoalBarChart: View {
         }
         .frame(height: 160)
         .chartYScale(domain: domain)
-        .chartXSelection(value: $selectedLabel)
+        if selectable {
+            chart.chartXSelection(value: $selectedLabel)
+        } else {
+            chart
+        }
     }
 
     /// Hidden when the host drives the scale from elsewhere — a single control
