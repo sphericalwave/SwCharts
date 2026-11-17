@@ -77,11 +77,21 @@ public struct PeriodBucketer: Sendable {
         let current = calendar.dateInterval(of: period.component, for: now)?.start
             ?? calendar.startOfDay(for: now)
 
+        // Days in order and buckets in order, so one walk fills them all: a
+        // chart of ten years shouldn't scan every day once per month.
+        let days = daily.sorted { $0.key < $1.key }
+        var next = days.startIndex
+
         return (0..<max(bucketCount ?? period.bucketCount, 0)).reversed().compactMap { offset in
             guard let start = calendar.date(byAdding: period.component, value: -offset, to: current),
                   let end = calendar.date(byAdding: period.component, value: 1, to: start)
             else { return nil }
-            let values = daily.filter { $0.key >= start && $0.key < end }.map(\.value)
+            while next < days.endIndex, days[next].key < start { next += 1 }
+            var values: [Double] = []
+            while next < days.endIndex, days[next].key < end {
+                values.append(days[next].value)
+                next += 1
+            }
             return PeriodBucket(
                 start: start,
                 end: end,

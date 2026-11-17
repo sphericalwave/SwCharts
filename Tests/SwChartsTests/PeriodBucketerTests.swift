@@ -17,6 +17,51 @@ final class PeriodBucketerTests: XCTestCase {
     // Thursday 2026-10-08, mid-afternoon.
     private lazy var now = date(2026, 10, 8, 15, 30)
 
+    // MARK: - Filling buckets
+
+    /// One walk over the days fills each bucket with what a scan per bucket
+    /// would: every period and aggregation, samples outside the window on both
+    /// sides, days on bucket edges, and a daylight-saving change in range.
+    func testBucketsMatchAScanPerBucket() {
+        var samples: [DatedSample] = []
+        var day = date(2023, 1, 1, 12)
+        var i = 0
+        while day < date(2026, 12, 1) {
+            samples.append(sample(day, Double(i % 17) + 1))
+            if i % 3 == 0 { samples.append(sample(day.addingTimeInterval(3600), Double(i % 5))) }
+            day = cal.date(byAdding: .day, value: 1 + i % 4, to: day)!
+            i += 1
+        }
+        samples.append(sample(date(2026, 3, 1), 50))       // first of a month, midnight
+        samples.append(sample(date(2026, 3, 8, 3), 60))    // the day the clocks change
+        samples.shuffle()
+
+        for period in ChartPeriod.allCases {
+            for aggregation in [MetricAggregation.sum, .average, .max, .min] {
+                for count in [nil, 1, 40] as [Int?] {
+                    let buckets = bucketer.buckets(for: samples, period: period, aggregation: aggregation,
+                                                   now: now, bucketCount: count)
+                    XCTAssertEqual(buckets.count, count ?? period.bucketCount)
+                    let daily = bucketer.dailyValues(samples, aggregation: aggregation)
+                    for bucket in buckets {
+                        let expected = aggregation.combine(daily.filter { $0.key >= bucket.start && $0.key < bucket.end }.map(\.value))
+                        guard let expected else {
+                            XCTAssertNil(bucket.value)
+                            continue
+                        }
+                        XCTAssertEqual(bucket.value ?? .nan, expected, accuracy: 1e-9)
+                    }
+                }
+            }
+        }
+    }
+
+    func testNoSamplesLeaveEveryBucketEmpty() {
+        let buckets = bucketer.buckets(for: [], period: .week, aggregation: .sum, now: now)
+        XCTAssertEqual(buckets.count, ChartPeriod.week.bucketCount)
+        XCTAssertTrue(buckets.allSatisfy { $0.value == nil })
+    }
+
     // MARK: - Long month windows
 
     private func monthBuckets(_ count: Int) -> [PeriodBucket] {
