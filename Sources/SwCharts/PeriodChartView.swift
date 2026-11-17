@@ -68,6 +68,7 @@ public struct PeriodChartView: View {
     private let interpolation: LineInterpolation
     private let reference: Reference?
     private let windowLabel: String?
+    private let flippedAxis: Bool
 
     /// A fixed level drawn as a labelled dashed line. Purely visual: it
     /// doesn't tint buckets, count hits or change the header.
@@ -109,6 +110,7 @@ public struct PeriodChartView: View {
         trimLeadingEmpty: Bool = false,
         reference: Reference? = nil,
         windowLabel: String? = nil,
+        flippedAxis: Bool = false,
         bucketer: PeriodBucketer = PeriodBucketer(),
         now: Date = .now
     ) {
@@ -136,6 +138,7 @@ public struct PeriodChartView: View {
         self.interpolation = interpolation
         self.reference = reference
         self.windowLabel = windowLabel
+        self.flippedAxis = flippedAxis
     }
 
     private var selectedBucket: PeriodBucket? {
@@ -202,9 +205,11 @@ public struct PeriodChartView: View {
         }
     }
 
+    /// With `flippedAxis` (samples negated so lower-is-better climbs), the arrow
+    /// points the way the real value moved; the colour still follows the line.
     private func changeLabel(_ change: Double) -> some View {
         HStack(spacing: 1) {
-            Image(systemName: change >= 0 ? "arrow.up" : "arrow.down")
+            Image(systemName: (change >= 0) != flippedAxis ? "arrow.up" : "arrow.down")
             Text(abs(change).formatted(.percent.precision(.fractionLength(abs(change) < 0.1 ? 1 : 0))))
         }
         .font(.caption.monospacedDigit().bold())
