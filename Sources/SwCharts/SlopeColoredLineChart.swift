@@ -220,8 +220,8 @@ public struct SlopeColoredLineChart: View {
                 let fromPoint = leg.from.centered()
                 let toPoint = leg.to.centered()
                 if let plotFrame = proxy.plotFrame,
-                   let from = proxy.position(forX: fromPoint.start, y: fromPoint.value),
-                   let to = proxy.position(forX: toPoint.start, y: toPoint.value) {
+                   let from = proxy.position(for: (x: fromPoint.start, y: fromPoint.value)),
+                   let to = proxy.position(for: (x: toPoint.start, y: toPoint.value)) {
                     let origin = geometry[plotFrame].origin
                     Text(projectionEndMarker)
                         .font(.system(size: 22))
