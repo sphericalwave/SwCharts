@@ -29,6 +29,10 @@ import Charts
 /// `projection` draws a dashed what-if continuation from there (or from the
 /// last point), outside the rising/falling coloring.
 ///
+/// `projectionEndMarker` puts an emoji (say "🚀") on the projection's last
+/// point, turned to fly along the dashed line's final leg. The glyph is taken
+/// to point up and to the right, as 🚀 does.
+///
 /// `interpolation: .catmullRom` draws the line — projection included — as one
 /// smooth `CatmullRomSpline` curve. Each segment still takes its own rising or
 /// falling color and the projection stays dashed; neighbouring segments meet
@@ -49,6 +53,7 @@ public struct SlopeColoredLineChart: View {
     private let currentColor: Color
     private let projection: [ChartPoint]
     private let interpolation: LineInterpolation
+    private let projectionEndMarker: String?
 
     public init(
         points: [ChartPoint],
@@ -62,7 +67,8 @@ public struct SlopeColoredLineChart: View {
         current: ChartPoint? = nil,
         currentColor: Color = .accentColor,
         projection: [ChartPoint] = [],
-        interpolation: LineInterpolation = .linear
+        interpolation: LineInterpolation = .linear,
+        projectionEndMarker: String? = nil
     ) {
         self.points = points
         self.yDomain = yDomain
@@ -76,6 +82,7 @@ public struct SlopeColoredLineChart: View {
         self.currentColor = currentColor
         self.projection = projection
         self.interpolation = interpolation
+        self.projectionEndMarker = projectionEndMarker
     }
 
     /// The solid line: the history, then `current` when there is one.
@@ -173,6 +180,9 @@ public struct SlopeColoredLineChart: View {
             }
         }
         .chartYScale(domain: yDomain)
+        .chartOverlay { proxy in
+            projectionEndMarkerOverlay(line: line, proxy: proxy)
+        }
         .chartYAxis {
             AxisMarks { value in
                 AxisGridLine()
@@ -184,6 +194,44 @@ public struct SlopeColoredLineChart: View {
             }
         }
         .frame(height: height)
+    }
+
+    /// The projection's final leg (from, to), or nil when there's no projection.
+    static func projectionEndLeg(_ projection: [ChartPoint], from line: [ChartPoint]) -> (from: ChartPoint, to: ChartPoint)? {
+        let path = projectionPoints(projection, from: line)
+        guard path.count > 1 else { return nil }
+        return (path[path.count - 2], path[path.count - 1])
+    }
+
+    /// Rotation that turns a glyph pointing up-right (−45° on screen, y down)
+    /// to point from `from` to `to`.
+    static func markerRotation(from: CGPoint, to: CGPoint) -> Angle {
+        guard from != to else { return .zero }
+        return .radians(atan2(to.y - from.y, to.x - from.x) + .pi / 4)
+    }
+
+    /// `projectionEndMarker` at the projection's end, along its last leg.
+    /// Positions come from the chart, so it follows the projection as it moves.
+    @ViewBuilder
+    private func projectionEndMarkerOverlay(line: [ChartPoint], proxy: ChartProxy) -> some View {
+        if let projectionEndMarker, let leg = Self.projectionEndLeg(projection, from: line) {
+            GeometryReader { geometry in
+                // Marks are plotted with `unit: .day`, i.e. in the middle of their day.
+                let fromPoint = leg.from.centered()
+                let toPoint = leg.to.centered()
+                if let plotFrame = proxy.plotFrame,
+                   let from = proxy.position(for: (x: fromPoint.start, y: fromPoint.value)),
+                   let to = proxy.position(for: (x: toPoint.start, y: toPoint.value)) {
+                    let origin = geometry[plotFrame].origin
+                    Text(projectionEndMarker)
+                        .font(.system(size: 22))
+                        .rotationEffect(Self.markerRotation(from: from, to: to))
+                        .position(x: origin.x + to.x, y: origin.y + to.y)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     @ChartContentBuilder
@@ -286,7 +334,8 @@ extension ChartPoint {
         projection: (1...3).map {
             ChartPoint(start: last.start.addingTimeInterval(Double($0) * week),
                        value: last.value * pow(1.01, Double($0)))
-        }
+        },
+        projectionEndMarker: "🚀"
     )
     .padding()
 }

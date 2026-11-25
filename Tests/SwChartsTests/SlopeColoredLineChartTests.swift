@@ -60,6 +60,31 @@ final class SlopeColoredLineChartTests: XCTestCase {
         XCTAssertEqual(SlopeColoredLineChart.projectionPoints(ahead, from: []), ahead)
     }
 
+    // MARK: - projectionEndMarker
+
+    func testProjectionEndLegIsTheLastDashedLeg() {
+        let all = points([1, 2, 5, 9])
+        let line = Array(all.prefix(2))
+        let leg = SlopeColoredLineChart.projectionEndLeg([all[2], all[3]], from: line)
+        XCTAssertEqual(leg?.from, all[2])
+        XCTAssertEqual(leg?.to, all[3])
+        let single = SlopeColoredLineChart.projectionEndLeg([all[2]], from: line)
+        XCTAssertEqual(single?.from, line[1])
+        XCTAssertEqual(single?.to, all[2])
+        XCTAssertNil(SlopeColoredLineChart.projectionEndLeg([], from: line))
+    }
+
+    func testMarkerRotationTurnsUpRightGlyphAlongLeg() {
+        let origin = CGPoint(x: 10, y: 10)
+        func degrees(_ to: CGPoint) -> Double {
+            SlopeColoredLineChart.markerRotation(from: origin, to: to).degrees
+        }
+        XCTAssertEqual(degrees(CGPoint(x: 20, y: 0)), 0, accuracy: 0.001)     // up-right: as drawn
+        XCTAssertEqual(degrees(CGPoint(x: 10, y: 0)), -45, accuracy: 0.001)   // straight up
+        XCTAssertEqual(degrees(CGPoint(x: 20, y: 10)), 45, accuracy: 0.001)   // flat right
+        XCTAssertEqual(degrees(origin), 0, accuracy: 0.001)                   // no leg
+    }
+
     // MARK: - curves(line:projection:)
 
     func testCurvesSplitSolidLineFromProjection() {
