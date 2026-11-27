@@ -62,16 +62,30 @@ final class SlopeColoredLineChartTests: XCTestCase {
 
     // MARK: - projectionEndMarker
 
-    func testProjectionEndLegIsTheLastDashedLeg() {
+    func testProjectionPathWholeEndsOnTheLastDashedLeg() throws {
         let all = points([1, 2, 5, 9])
         let line = Array(all.prefix(2))
-        let leg = SlopeColoredLineChart.projectionEndLeg([all[2], all[3]], from: line)
-        XCTAssertEqual(leg?.from, all[2])
-        XCTAssertEqual(leg?.to, all[3])
-        let single = SlopeColoredLineChart.projectionEndLeg([all[2]], from: line)
-        XCTAssertEqual(single?.from, line[1])
-        XCTAssertEqual(single?.to, all[2])
-        XCTAssertNil(SlopeColoredLineChart.projectionEndLeg([], from: line))
+        let path = try XCTUnwrap(SlopeColoredLineChart.projectionPath([all[2], all[3]], from: line, progress: 1))
+        XCTAssertEqual(path.points, [all[1], all[2], all[3]].map { $0.centered() })
+        XCTAssertEqual(path.leg.from, all[2].centered())
+        XCTAssertEqual(path.leg.to, all[3].centered())
+        XCTAssertNil(SlopeColoredLineChart.projectionPath([], from: line, progress: 1))
+    }
+
+    func testProjectionPathPartwayStopsAlongItsLeg() throws {
+        let all = points([1, 2, 6])
+        let line = Array(all.prefix(2))
+        let from = all[1].centered(), to = all[2].centered()
+        let half = try XCTUnwrap(SlopeColoredLineChart.projectionPath([all[2]], from: line, progress: 0.5))
+        XCTAssertEqual(half.points.count, 2)
+        XCTAssertEqual(half.points[1].value, 4, accuracy: 0.0001)
+        XCTAssertEqual(half.points[1].start.timeIntervalSince(from.start),
+                       to.start.timeIntervalSince(from.start) / 2, accuracy: 0.001)
+        XCTAssertEqual(half.leg.to, to)
+        // At the start the tip sits on the line's end, still headed along the leg.
+        let start = try XCTUnwrap(SlopeColoredLineChart.projectionPath([all[2]], from: line, progress: 0))
+        XCTAssertEqual(start.points.last, from)
+        XCTAssertEqual(start.leg.to, to)
     }
 
     func testMarkerRotationTurnsUpRightGlyphAlongLeg() {

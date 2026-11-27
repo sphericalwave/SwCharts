@@ -33,6 +33,12 @@ import Charts
 /// point, turned to fly along the dashed line's final leg. The glyph is taken
 /// to point up and to the right, as 🚀 does.
 ///
+/// `projectionProgress` (0…1, default 1) draws only that much of the
+/// projection, from the solid line's end, with the marker riding its tip
+/// along the line — animate it to fly the marker to the projection's end.
+/// The legs share it evenly. The x-axis stays sized for the whole projection,
+/// so nothing rescales as it grows. Smoothest with `.linear` interpolation.
+///
 /// `interpolation: .catmullRom` draws the line — projection included — as one
 /// smooth `CatmullRomSpline` curve. Each segment still takes its own rising or
 /// falling color and the projection stays dashed; neighbouring segments meet
@@ -54,6 +60,7 @@ public struct SlopeColoredLineChart: View {
     private let projection: [ChartPoint]
     private let interpolation: LineInterpolation
     private let projectionEndMarker: String?
+    private let projectionProgress: Double
 
     public init(
         points: [ChartPoint],
@@ -68,7 +75,8 @@ public struct SlopeColoredLineChart: View {
         currentColor: Color = .accentColor,
         projection: [ChartPoint] = [],
         interpolation: LineInterpolation = .linear,
-        projectionEndMarker: String? = nil
+        projectionEndMarker: String? = nil,
+        projectionProgress: Double = 1
     ) {
         self.points = points
         self.yDomain = yDomain
@@ -83,6 +91,7 @@ public struct SlopeColoredLineChart: View {
         self.projection = projection
         self.interpolation = interpolation
         self.projectionEndMarker = projectionEndMarker
+        self.projectionProgress = min(max(projectionProgress, 0), 1)
     }
 
     /// The solid line: the history, then `current` when there is one.
@@ -95,6 +104,24 @@ public struct SlopeColoredLineChart: View {
     static func projectionPoints(_ projection: [ChartPoint], from line: [ChartPoint]) -> [ChartPoint] {
         guard !projection.isEmpty else { return [] }
         return [line.last].compactMap { $0 } + projection
+    }
+
+    /// The dashed line drawn `progress` of the way along (legs share it
+    /// evenly), with plot positions: each point moved to the middle of its
+    /// day, where `unit: .day` marks are drawn, and the tip partway along its
+    /// leg. `leg` is the whole leg the tip is on, for the marker's heading.
+    /// Nil when there's nothing to project.
+    static func projectionPath(_ projection: [ChartPoint], from line: [ChartPoint], progress: Double,
+                               calendar: Calendar = .current) -> (points: [ChartPoint], leg: (from: ChartPoint, to: ChartPoint))? {
+        let path = projectionPoints(projection, from: line).map { $0.centered(calendar: calendar) }
+        guard path.count > 1 else { return nil }
+        let along = min(max(progress, 0), 1) * Double(path.count - 1)
+        let index = min(Int(along), path.count - 2)
+        let fraction = along - Double(index)
+        let from = path[index], to = path[index + 1]
+        let tip = ChartPoint(start: from.start.addingTimeInterval(to.start.timeIntervalSince(from.start) * fraction),
+                             value: from.value + (to.value - from.value) * fraction)
+        return (Array(path[...index]) + [tip], (from, to))
     }
 
     /// One leg of the line: the pair of points it spans, and which way it went.
@@ -196,13 +223,6 @@ public struct SlopeColoredLineChart: View {
         .frame(height: height)
     }
 
-    /// The projection's final leg (from, to), or nil when there's no projection.
-    static func projectionEndLeg(_ projection: [ChartPoint], from line: [ChartPoint]) -> (from: ChartPoint, to: ChartPoint)? {
-        let path = projectionPoints(projection, from: line)
-        guard path.count > 1 else { return nil }
-        return (path[path.count - 2], path[path.count - 1])
-    }
-
     /// Rotation that turns a glyph pointing up-right (−45° on screen, y down)
     /// to point from `from` to `to`.
     static func markerRotation(from: CGPoint, to: CGPoint) -> Angle {
@@ -210,23 +230,25 @@ public struct SlopeColoredLineChart: View {
         return .radians(atan2(to.y - from.y, to.x - from.x) + .pi / 4)
     }
 
-    /// `projectionEndMarker` at the projection's end, along its last leg.
-    /// Positions come from the chart, so it follows the projection as it moves.
+    /// `projectionEndMarker` at the drawn projection's tip (its end, when
+    /// whole), headed along the leg it's on. Positions come from the chart, so
+    /// it follows the projection as it moves or grows.
     @ViewBuilder
     private func projectionEndMarkerOverlay(line: [ChartPoint], proxy: ChartProxy) -> some View {
-        if let projectionEndMarker, let leg = Self.projectionEndLeg(projection, from: line) {
+        if let projectionEndMarker,
+           let path = Self.projectionPath(projection, from: line, progress: projectionProgress),
+           let tipPoint = path.points.last {
             GeometryReader { geometry in
-                // Marks are plotted with `unit: .day`, i.e. in the middle of their day.
-                let fromPoint = leg.from.centered()
-                let toPoint = leg.to.centered()
+                // Path points are already where `unit: .day` marks are drawn.
                 if let plotFrame = proxy.plotFrame,
-                   let from = proxy.position(for: (x: fromPoint.start, y: fromPoint.value)),
-                   let to = proxy.position(for: (x: toPoint.start, y: toPoint.value)) {
+                   let from = proxy.position(for: (x: path.leg.from.start, y: path.leg.from.value)),
+                   let to = proxy.position(for: (x: path.leg.to.start, y: path.leg.to.value)),
+                   let tip = proxy.position(for: (x: tipPoint.start, y: tipPoint.value)) {
                     let origin = geometry[plotFrame].origin
                     Text(projectionEndMarker)
                         .font(.system(size: 22))
                         .rotationEffect(Self.markerRotation(from: from, to: to))
-                        .position(x: origin.x + to.x, y: origin.y + to.y)
+                        .position(x: origin.x + tip.x, y: origin.y + tip.y)
                 }
             }
             .allowsHitTesting(false)
@@ -254,11 +276,15 @@ public struct SlopeColoredLineChart: View {
         }
     }
 
+    /// The dashed line, as far as `projectionProgress` reaches. Plain dates:
+    /// the points are already mid-day, and `unit: .day` would snap a growing
+    /// tip to whole days.
     @ChartContentBuilder
     private func linearProjection(line: [ChartPoint]) -> some ChartContent {
-        ForEach(Array(Self.projectionPoints(projection, from: line).enumerated()), id: \.offset) { _, point in
+        let path = Self.projectionPath(projection, from: line, progress: projectionProgress)?.points ?? []
+        ForEach(Array(path.enumerated()), id: \.offset) { _, point in
             LineMark(
-                x: .value("Date", point.start, unit: .day),
+                x: .value("Date", point.start),
                 y: .value("Value", point.value),
                 series: .value("Projection", "projection")
             )
@@ -267,6 +293,21 @@ public struct SlopeColoredLineChart: View {
             .symbol(.circle)
             .symbolSize(16)
         }
+        projectionExtent(line: line)
+    }
+
+    /// While the projection is partly drawn, an invisible mark at its end
+    /// keeps the x-axis sized for all of it.
+    @ChartContentBuilder
+    private func projectionExtent(line: [ChartPoint]) -> some ChartContent {
+        if projectionProgress < 1, let end = Self.projectionPoints(projection, from: line).last {
+            PointMark(
+                x: .value("Date", end.start, unit: .day),
+                y: .value("Value", end.value)
+            )
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
     }
 
     /// The smooth curve, one series per segment so each keeps its own style.
@@ -274,7 +315,7 @@ public struct SlopeColoredLineChart: View {
     /// whole days.
     @ChartContentBuilder
     private func smoothSegments(line: [ChartPoint]) -> some ChartContent {
-        ForEach(Self.curves(line: line, projection: projection)) { curve in
+        ForEach(Self.curves(line: line, projection: drawnProjection(line: line))) { curve in
             ForEach(Array(curve.samples.enumerated()), id: \.offset) { _, sample in
                 LineMark(
                     x: .value("Date", sample.start),
@@ -293,7 +334,7 @@ public struct SlopeColoredLineChart: View {
     /// the curve would mark every sample.
     @ChartContentBuilder
     private func smoothProjectionPoints(line: [ChartPoint]) -> some ChartContent {
-        ForEach(Array(Self.projectionPoints(projection, from: line).dropFirst().enumerated()), id: \.offset) { _, point in
+        ForEach(Array(Self.projectionPoints(drawnProjection(line: line), from: line).dropFirst().enumerated()), id: \.offset) { _, point in
             PointMark(
                 x: .value("Date", point.start, unit: .day),
                 y: .value("Value", point.value)
@@ -301,6 +342,13 @@ public struct SlopeColoredLineChart: View {
             .foregroundStyle(.secondary)
             .symbolSize(16)
         }
+        projectionExtent(line: line)
+    }
+
+    /// The projection points `projectionProgress` reaches, tip last (whole at 1).
+    private func drawnProjection(line: [ChartPoint]) -> [ChartPoint] {
+        guard projectionProgress < 1 else { return projection }
+        return Array((Self.projectionPath(projection, from: line, progress: projectionProgress)?.points ?? []).dropFirst())
     }
 }
 
